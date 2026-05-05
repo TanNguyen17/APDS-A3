@@ -1,0 +1,11 @@
+# Data files
+*.txt
+*.csv
+*.zip
+*.gz
+
+# Python/Jupyter
+.ipynb_checkpoints/
+__pycache__/
+*.py[cod]
+*$py.class
