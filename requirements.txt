@@ -1,0 +1,11 @@
+gradio>=4.0
+pandas
+numpy
+scikit-learn
+nltk
+scipy
+matplotlib
+imbalanced-learn
+Pillow
+requests
+beautifulsoup4

@@ -1,0 +1,8 @@
+# Third-party libraries used by task1.ipynb and task2_3.ipynb
+nltk
+numpy
+pandas
+scikit-learn
+scipy
+matplotlib
+imblearn
