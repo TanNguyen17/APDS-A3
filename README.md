@@ -7,7 +7,7 @@ A Gradio-based web application for browsing, reviewing, and analyzing cosmetics/
 | Task | Description |
 |------|-------------|
 | **Search** | Multi-strategy product search (string matching + GloVe semantic similarity). Handles variant forms ("Maybeline" ≈ "Maybelline New York") |
-| **Write Review** | Create reviews with 3-model ensemble buyer prediction (BoW LR + BoW+Meta LR + GloVe+Meta RF), soft-voting fusion, user override |
+| **Write Review** | Create reviews with 3-model ensemble buyer prediction (BoW LR + BoW+Meta LR + GloVe+Meta LR), soft-voting fusion, user override |
 | **Recommendations** | Content-based similar products using hybrid similarity (70% text + 15% brand + 15% price) on GloVe embeddings |
 | **Sentiment Insights** | Per-product sentiment breakdown, key terms extraction, and two-product comparative analysis |
 
@@ -24,10 +24,10 @@ pip install -r requirements.txt
 python -c "import nltk; nltk.download('wordnet'); nltk.download('omw-1.4')"
 
 # 4. Train models and generate pickle files (first time only, ~60s)
-python train_models.py
+python scripts/train_models.py
 
 # 5. Generate product images (first time only, ~30s)
-python image_scraper.py
+python scripts/image_scraper.py
 
 # 6. Launch the web app
 python app.py
@@ -39,23 +39,35 @@ Open http://localhost:7860 in your browser.
 
 ```
 APDS-A3/
-├── app.py                  # Gradio web app (4 tabs, custom CSS)
-├── preprocessing.py        # Text pipeline + custom sklearn transformers
-├── data_loader.py          # Load CSV, GloVe, vocab, pickles at startup
-├── search_engine.py        # Task 1: multi-strategy product search
-├── classifier.py           # Task 2: 3-model ensemble buyer prediction
-├── recommender.py          # Task 3: hybrid content-based recommendations
-├── sentiment.py            # Task 4: sentiment dashboard + comparison
-├── train_models.py         # One-time: train & save models as pkl
-├── image_scraper.py        # One-time: generate product images
-├── requirements.txt        # Python dependencies
+├── app.py                  # Entry point: load data, compose tabs, launch Gradio
+├── core/                   # Backend logic modules
+│   ├── data_loader.py            # Load CSV, GloVe, vocab, pickles at startup
+│   ├── preprocessing.py          # Text pipeline + custom sklearn transformers
+│   ├── classifier.py             # Task 2: 3-model ensemble buyer prediction
+│   ├── search_engine.py          # Task 1: multi-strategy product search
+│   ├── recommender.py            # Task 3: hybrid content-based recommendations
+│   └── sentiment.py              # Task 4: sentiment dashboard + comparison
+├── ui/                     # Gradio UI modules
+│   ├── components.py             # Shared render functions (card, grid, predictions)
+│   ├── product_detail.py         # Product detail page renderer
+│   ├── recommendation_grid.py    # Recommendation results grid renderer
+│   ├── search_tab.py             # Tab 1: Search Products
+│   ├── review_tab.py             # Tab 2: Write a Review
+│   ├── recommendation_tab.py     # Tab 3: Similar Products
+│   └── sentiment_tab.py          # Tab 4: Sentiment Insights
+├── static/                 # Frontend assets
+│   ├── styles.css                # Custom CSS
+│   └── scripts.js                # Client-side JS (star rating, filters)
+├── scripts/                # Offline utility scripts
+│   ├── train_models.py           # Train & save models as pkl
+│   └── image_scraper.py          # Generate product placeholder images
 ├── models/                 # Pre-trained model pickle files
 │   ├── model_a_bow.pkl           # BoW + Logistic Regression (text only)
 │   ├── model_b_bow_meta.pkl      # BoW + title + metadata + LR
-│   ├── model_c_glove_meta.pkl    # GloVe + metadata + Random Forest
+│   ├── model_c_glove_meta.pkl    # GloVe + metadata + LR
 │   ├── label_encoder.pkl         # Brand name encoder (11 brands)
 │   ├── collocation_dict.pkl      # 111 bigram patterns for preprocessing
-│   └── product_vectors.pkl       # 293 product-level GloVe embeddings
+│   └── product_vectors.pkl       # 295 product-level GloVe embeddings
 ├── images/                 # Product thumbnail images (295 files)
 ├── notebooks/              # Milestone I notebooks and data
 │   ├── task1_report.ipynb        # Preprocessing pipeline
@@ -64,7 +76,8 @@ APDS-A3/
 │   ├── glove.6B.300d.txt         # GloVe 300d embeddings (~1GB)
 │   ├── vocab.txt                 # 7,366 word vocabulary
 │   └── stopwords_en.txt          # 570 stopwords
-└── results/                # E2E test outputs
+├── requirements.txt
+└── README.md
 ```
 
 ## Data
@@ -80,7 +93,7 @@ APDS-A3/
 |-------|----------|-----------|------------|
 | A | BoW text only (sparse, 7366d) | Logistic Regression | 0.56 |
 | B | BoW text + title + metadata (sparse + numeric) | Logistic Regression | 0.66 |
-| C | GloVe embeddings + title + metadata (dense 300d + numeric) | Random Forest | 0.68 |
+| C | GloVe embeddings + title + metadata (dense 300d + numeric) | Logistic Regression | 0.68 |
 
 **Fusion**: Soft-voting — average predicted probabilities from all 3 models, threshold at 0.5.
 
@@ -99,20 +112,10 @@ APDS-A3/
 python app.py
 
 # Retrain models (if data changes)
-python train_models.py
+python scripts/train_models.py
 
 # Regenerate product images
-python image_scraper.py
-
-# Run E2E tests
-python -c "exec(open('results/run_tests.py').read())"
-
-# Check model performance
-python -c "
-import pickle
-from sklearn.metrics import classification_report
-# Models are saved with test metrics in train_models.py output
-"
+python scripts/image_scraper.py
 ```
 
 ## Requirements
