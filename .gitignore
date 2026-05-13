@@ -36,3 +36,5 @@ results/
 .claude/
 .DS_Store
 CLAUDE.md
+AGENTS.md
+.mcp.json

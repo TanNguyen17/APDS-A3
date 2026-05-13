@@ -5,10 +5,12 @@ Loads all data assets at startup: datasets, models, embeddings, and pre-computed
 
 import os
 import time
+import uuid
 import pickle
 import numpy as np
 import pandas as pd
-from typing import Dict, List, Set, Any
+from datetime import datetime
+from typing import Dict, List, Set, Any, Optional
 
 # Import custom transformers for pickle deserialization
 from core.preprocessing import UnweightedVectorTransformer, WeightedVectorTransformer
@@ -21,9 +23,41 @@ sys.modules['preprocessing'] = core.preprocessing
 # In-memory review store for new reviews
 new_reviews = []
 
+# Pending (unconfirmed) reviews awaiting user confirmation
+pending_reviews: Dict[str, Dict] = {}
+
+# Reference to the original reviews DataFrame (set at app startup)
+_df_ref = None
+
+
+def set_df(df: pd.DataFrame) -> None:
+    global _df_ref
+    _df_ref = df
+
+
+def get_df() -> pd.DataFrame:
+    return _df_ref
+
+
+def add_pending_review(review_dict: Dict[str, Any]) -> str:
+    """Store a review as pending (pre-confirmation) and return its temp_id."""
+    temp_id = str(uuid.uuid4())
+    review_dict['_temp_id'] = temp_id
+    pending_reviews[temp_id] = review_dict
+    return temp_id
+
+
+def pop_pending_review(temp_id: str) -> Optional[Dict[str, Any]]:
+    """Remove and return a pending review, or None if not found."""
+    return pending_reviews.pop(temp_id, None)
+
 
 def add_review(review_dict: Dict[str, Any]) -> None:
     """Add a new review to the in-memory store."""
+    if not review_dict.get('review_id'):
+        review_dict['review_id'] = str(uuid.uuid4())
+    if not review_dict.get('review_date'):
+        review_dict['review_date'] = datetime.now().strftime('%d/%m/%Y %H:%M')
     new_reviews.append(review_dict)
 
 
@@ -91,11 +125,24 @@ def load_stopwords(base_path: str) -> Set[str]:
 def load_glove_embeddings(base_path: str) -> Dict[str, np.ndarray]:
     """
     Load FULL GloVe embeddings (all ~400K words).
-    Prints progress every 100K lines.
+    On first run, parses the .txt and caches to glove_cache.pkl for fast reloads.
     """
     glove_path = os.path.join(base_path, 'notebooks', 'glove.6B.300d.txt')
+    cache_path = os.path.join(base_path, 'models', 'glove_cache.pkl')
+
+    # Fast path: load from cache
+    if os.path.exists(cache_path):
+        print(f"Loading GloVe from cache ({cache_path})...")
+        start = time.time()
+        with open(cache_path, 'rb') as f:
+            embeddings = pickle.load(f)
+        elapsed = time.time() - start
+        print(f"  ✓ Loaded {len(embeddings):,} GloVe embeddings in {elapsed:.2f}s (cached)")
+        return embeddings
+
+    # First run: parse .txt then save cache
     print(f"Loading glove.6B.300d.txt from {glove_path}...")
-    print("  (This will take a while - ~400K words)")
+    print("  (First run — will cache for faster future loads)")
 
     start = time.time()
     embeddings = {}
@@ -104,12 +151,9 @@ def load_glove_embeddings(base_path: str) -> Dict[str, np.ndarray]:
     with open(glove_path, 'r', encoding='utf-8') as f:
         for line in f:
             line_count += 1
-
-            # Print progress every 100K lines
             if line_count % 100000 == 0:
                 elapsed = time.time() - start
                 print(f"  ... {line_count:,} words loaded ({elapsed:.1f}s)")
-
             parts = line.strip().split()
             word = parts[0]
             vector = np.array(parts[1:], dtype=np.float32)
@@ -117,6 +161,12 @@ def load_glove_embeddings(base_path: str) -> Dict[str, np.ndarray]:
 
     elapsed = time.time() - start
     print(f"  ✓ Loaded {len(embeddings):,} GloVe embeddings in {elapsed:.2f}s")
+
+    print(f"  Saving cache to {cache_path}...")
+    with open(cache_path, 'wb') as f:
+        pickle.dump(embeddings, f, protocol=4)
+    print("  ✓ Cache saved")
+
     return embeddings
 
 
@@ -172,6 +222,16 @@ def compute_product_aggregations(df: pd.DataFrame) -> pd.DataFrame:
     # Rename review_id count to review_count
     products_df.rename(columns={'review_id': 'review_count'}, inplace=True)
 
+    # Add buyer_count per product
+    buyer_counts = (
+        df[df['is_a_buyer'].isin([True, 1, 'True', 'TRUE'])]
+        .groupby('product_id')
+        .size()
+        .reset_index(name='buyer_count')
+    )
+    products_df = products_df.merge(buyer_counts, on='product_id', how='left')
+    products_df['buyer_count'] = products_df['buyer_count'].fillna(0).astype(int)
+
     elapsed = time.time() - start
     print(f"  ✓ Aggregated {len(products_df):,} unique products in {elapsed:.2f}s")
     return products_df
@@ -184,12 +244,10 @@ def build_reviews_by_product(df: pd.DataFrame) -> Dict[str, List[Dict[str, Any]]
     print("Building reviews_by_product index...")
     start = time.time()
 
-    reviews_by_product = {}
-    for _, row in df.iterrows():
-        product_id = row['product_id']
-        if product_id not in reviews_by_product:
-            reviews_by_product[product_id] = []
-        reviews_by_product[product_id].append(row.to_dict())
+    reviews_by_product = {
+        pid: group.to_dict('records')
+        for pid, group in df.groupby('product_id')
+    }
 
     elapsed = time.time() - start
     print(f"  ✓ Indexed reviews for {len(reviews_by_product):,} products in {elapsed:.2f}s")

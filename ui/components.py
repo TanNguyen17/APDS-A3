@@ -19,6 +19,7 @@ def render_product_card(product, images_dir, onclick_js=""):
     brand = product['brand_name']
     title = product['product_title']
     price = product['price']
+    buyer_count = product.get('buyer_count', 0)
 
     display_title = title[:55] + "..." if len(title) > 55 else title
 
@@ -37,6 +38,7 @@ def render_product_card(product, images_dir, onclick_js=""):
             <span class="brand">{brand}</span>
             <h4 class="title">{display_title}</h4>
             <div class="price">₹{price:.0f}</div>
+            {f'<div class="card-buyer-count">{buyer_count:,} sold</div>' if buyer_count else ''}
         </div>
     </div>
     """

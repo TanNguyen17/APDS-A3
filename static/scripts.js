@@ -1,3 +1,12 @@
+// Switch to Review tab and pre-fill product dropdown
+function switchToReviewTab(productId) {
+    var tabBtn = document.querySelector('#tab-review-button');
+    if (tabBtn) tabBtn.click();
+    setTimeout(function() {
+        setGradioValue('#review_product_trigger', productId + '_' + Date.now());
+    }, 150);
+}
+
 // Helper: set Gradio textbox value and trigger change detection
 function setGradioValue(selector, value) {
     var el = document.querySelector(selector + ' textarea') || document.querySelector(selector + ' input');
@@ -35,6 +44,7 @@ function sortReviews(mode, btn) {
         if (mode === 'rating-desc') return parseFloat(b.getAttribute('data-rating')) - parseFloat(a.getAttribute('data-rating'));
         if (mode === 'rating-asc') return parseFloat(a.getAttribute('data-rating')) - parseFloat(b.getAttribute('data-rating'));
         if (mode === 'alpha-az') return a.getAttribute('data-title').localeCompare(b.getAttribute('data-title'));
+        if (mode === 'newest') return (b.getAttribute('data-date') || '').localeCompare(a.getAttribute('data-date') || '');
         return 0;
     });
     items.forEach(function(item) { container.appendChild(item); });
