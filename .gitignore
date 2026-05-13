@@ -1,11 +1,38 @@
 # Data files
-*.txt
 *.csv
 *.zip
 *.gz
+
+# Large text data
+notebooks/glove.6B.300d.txt
+notebooks/unweighted_vectors.txt
+notebooks/weighted_vectors.txt
+notebooks/count_vectors.txt
+glove.6B.300d.txt
+count_vectors.txt
+weighted_vectors.txt
+unweighted_vectors.txt
+vocab.txt
+stopwords_en.txt
+processed.csv
 
 # Python/Jupyter
 .ipynb_checkpoints/
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Documents
+*.pdf
+milestone-*/
+
+# Environment
+.venv/
+.DS_Store
+
+# Results
+results/
+.agents/
+.claude/
+.DS_Store
+CLAUDE.md
