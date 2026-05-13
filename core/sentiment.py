@@ -5,6 +5,7 @@ Provides sentiment breakdown, key term extraction, and product comparison
 functionality for the Gradio web application.
 """
 
+import math
 import plotly.graph_objects as go
 import pandas as pd
 from collections import Counter
@@ -205,6 +206,9 @@ def compare_products(
     }
 
 
+COMPARISON_COLORS = ['#EE4D2D', '#3498db', '#2ecc71', '#9b59b6', '#f39c12']
+
+
 def create_sentiment_chart(breakdown: Dict) -> go.Figure:
     """
     Create a donut chart showing sentiment distribution.
@@ -246,6 +250,93 @@ def create_sentiment_chart(breakdown: Dict) -> go.Figure:
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
         font=dict(family='-apple-system, BlinkMacSystemFont, sans-serif')
+    )
+
+    return fig
+
+
+def create_single_bar_chart(breakdown: Dict, name: str) -> go.Figure:
+    """
+    Create a bar chart showing sentiment distribution for a single product.
+    """
+    categories = ['Positive', 'Neutral', 'Negative']
+    pcts = [breakdown['positive_pct'], breakdown['neutral_pct'], breakdown['negative_pct']]
+    colors = ['#2ecc71', '#95a5a6', '#EE4D2D']
+
+    fig = go.Figure(data=[go.Bar(
+        x=categories,
+        y=pcts,
+        marker_color=colors,
+        text=[f'{p:.1f}%' for p in pcts],
+        textposition='inside',
+        textfont=dict(color='white', size=13)
+    )])
+
+    fig.update_layout(
+        title=dict(
+            text=f'{name} ({breakdown["total"]} reviews)',
+            font=dict(size=14, family='-apple-system, BlinkMacSystemFont, sans-serif'),
+            x=0.5
+        ),
+        yaxis=dict(title='Percentage', range=[0, 100], gridcolor='#f0f0f0'),
+        xaxis=dict(title=''),
+        margin=dict(t=50, b=30, l=50, r=20),
+        height=320,
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(family='-apple-system, BlinkMacSystemFont, sans-serif'),
+        showlegend=False
+    )
+
+    return fig
+
+
+def create_multi_comparison_chart(
+    breakdowns: List[Dict],
+    names: List[str]
+) -> go.Figure:
+    """
+    Create a grouped bar chart comparing sentiment distributions of 2-5 products.
+    """
+    categories = ['Positive', 'Neutral', 'Negative']
+
+    fig = go.Figure()
+
+    for i, (breakdown, name) in enumerate(zip(breakdowns, names)):
+        pcts = [breakdown['positive_pct'], breakdown['neutral_pct'], breakdown['negative_pct']]
+        fig.add_trace(go.Bar(
+            x=categories,
+            y=pcts,
+            name=f'{name} (n={breakdown["total"]})',
+            marker_color=COMPARISON_COLORS[i % len(COMPARISON_COLORS)],
+            text=[f'{p:.1f}%' for p in pcts],
+            textposition='inside',
+            textfont=dict(color='white', size=11)
+        ))
+
+    n = len(breakdowns)
+    legend_rows = math.ceil(n / 2)
+    extra_legend_height = max(0, legend_rows - 1) * 28
+    chart_height = 420 + extra_legend_height
+    bottom_margin = 80 + extra_legend_height
+
+    fig.update_layout(
+        title=dict(
+            text='Sentiment Comparison',
+            font=dict(size=16, family='-apple-system, BlinkMacSystemFont, sans-serif'),
+            x=0.5
+        ),
+        barmode='group',
+        yaxis=dict(title='Percentage of Reviews', range=[0, 100], gridcolor='#f0f0f0'),
+        xaxis=dict(title=''),
+        legend=dict(orientation='h', yanchor='top', y=-0.12, xanchor='center', x=0.5),
+        margin=dict(t=60, b=bottom_margin, l=50, r=20),
+        height=chart_height,
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(family='-apple-system, BlinkMacSystemFont, sans-serif'),
+        bargap=0.2,
+        bargroupgap=0.1
     )
 
     return fig
