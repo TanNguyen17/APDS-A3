@@ -28,49 +28,74 @@ def get_query_embedding(query: str, embeddings_dict: Dict[str, np.ndarray]) -> O
     return None
 
 
-def normalized_string_match(query: str, products_df: pd.DataFrame, similarity_threshold: float = 0.7) -> List[int]:
+def normalized_string_match(query: str, products_df: pd.DataFrame, similarity_threshold: float = 0.7) -> Dict[int, float]:
     """
-    Strategy 1: Normalized string matching with fuzzy brand name matching.
-
+    Strategy 1: Weighted string matching with brand and title relevance.
+    
     Args:
-        query: search query (lowercased internally)
-        products_df: DataFrame with brand_name, product_title, product_id
-        similarity_threshold: minimum SequenceMatcher ratio for brand variants
-
+        query: raw user search string
+        products_df: DataFrame with product information
+        similarity_threshold: minimum similarity ratio for fuzzy matching
+        
     Returns:
-        list of product_ids matching the query
+        Dict mapping product_id to relevancy score (0.0 to 1.0)
     """
     query_lower = query.lower()
-    query_words = query_lower.split()
-    matched_ids = []
+    query_words = [w for w in query_lower.split() if len(w) > 1]
+    if not query_words:
+        return {}
 
-    # Per-word AND matching: product must contain ALL query words in brand OR title
+    results = {}
+    
+    # Identify if any query word is a brand match
+    all_brands = set(products_df['brand_name'].str.lower().unique())
+    brand_query_words = [w for w in query_words if w in all_brands]
+
     for _, row in products_df.iterrows():
         brand_lower = str(row['brand_name']).lower()
         title_lower = str(row['product_title']).lower()
-        combined = brand_lower + " " + title_lower
-
-        if all(word in combined for word in query_words):
-            matched_ids.append(row['product_id'])
-
-    # Fuzzy brand name matching for variants (e.g., "Maybeline" ≈ "Maybelline New York")
-    if len(query_lower) > 3:  # Only fuzzy match for queries > 3 chars
-        for idx, row in products_df.iterrows():
-            brand_lower = str(row['brand_name']).lower()
-
-            # Extract first word of brand name for comparison
+        
+        # Calculate word-based match stats
+        matches = [word for word in query_words if word in title_lower or word in brand_lower]
+        if not matches:
+            # Try fuzzy brand match as fallback
             brand_first_word = brand_lower.split()[0] if brand_lower else ""
-            query_first_word = query_lower.split()[0]
+            query_first_word = query_words[0]
+            sim = SequenceMatcher(None, query_first_word, brand_first_word).ratio()
+            if sim >= similarity_threshold:
+                # Fuzzy brand match gets a low base score
+                results[row['product_id']] = 0.3 * sim
+            continue
 
-            # Compare query with full brand and first word of brand
-            similarity_full = SequenceMatcher(None, query_lower, brand_lower).ratio()
-            similarity_first = SequenceMatcher(None, query_first_word, brand_first_word).ratio()
+        # Scoring Logic:
+        # 1. Base score = % of query words found
+        match_ratio = len(matches) / len(query_words)
+        
+        # 2. Category match bonus (if query has multiple words and we match the 'non-brand' parts)
+        category_words = [w for w in query_words if w not in brand_query_words]
+        category_match_ratio = 0
+        if category_words:
+            category_matches = [w for w in category_words if w in title_lower]
+            category_match_ratio = len(category_matches) / len(category_words)
+        
+        # 3. Brand alignment bonus
+        brand_match = 0
+        if any(w in brand_lower for w in query_words):
+            brand_match = 1.0
 
-            if similarity_full >= similarity_threshold or similarity_first >= similarity_threshold:
-                if row['product_id'] not in matched_ids:
-                    matched_ids.append(row['product_id'])
+        # Final score calculation:
+        # - High weight on matching ALL words (match_ratio)
+        # - Medium weight on matching the 'category/product' part (category_match_ratio)
+        # - Small weight on brand alignment
+        score = (0.5 * match_ratio) + (0.4 * category_match_ratio) + (0.1 * brand_match)
+        
+        # Exact match for everything gets a slight boost to 1.0
+        if len(matches) == len(query_words) and brand_match > 0:
+            score = 1.0
+            
+        results[row['product_id']] = float(score)
 
-    return list(set(matched_ids))
+    return results
 
 
 def semantic_search(query: str, products_df: pd.DataFrame, product_vectors: Dict[int, np.ndarray],
@@ -79,14 +104,14 @@ def semantic_search(query: str, products_df: pd.DataFrame, product_vectors: Dict
     Strategy 2: Semantic search using GloVe embeddings and cosine similarity.
 
     Args:
-        query: search query
-        products_df: DataFrame with product_id
-        product_vectors: dict[product_id → np.array(300)]
-        embeddings_dict: dict[word → np.array(300)]
+        query: raw user search string
+        products_df: DataFrame with product information
+        product_vectors: dict mapping product_id to GloVe vectors
+        embeddings_dict: full GloVe embeddings dictionary
         similarity_threshold: minimum cosine similarity score
 
     Returns:
-        dict[product_id → cosine_score] for products above threshold
+        Dict mapping product_id to similarity score
     """
     query_embedding = get_query_embedding(query, embeddings_dict)
 
@@ -97,6 +122,7 @@ def semantic_search(query: str, products_df: pd.DataFrame, product_vectors: Dict
     query_embedding = query_embedding.reshape(1, -1)
 
     for product_id, product_vec in product_vectors.items():
+        # Optimization: only check products that actually exist in current dataframe
         if product_id not in products_df['product_id'].values:
             continue
 
@@ -104,7 +130,8 @@ def semantic_search(query: str, products_df: pd.DataFrame, product_vectors: Dict
         similarity = cosine_similarity(query_embedding, product_vec)[0][0]
 
         if similarity >= similarity_threshold:
-            results[product_id] = float(similarity)
+            # Semantic search results are capped at 0.9 to ensure string matches win
+            results[product_id] = float(similarity) * 0.9
 
     return results
 
@@ -112,49 +139,35 @@ def semantic_search(query: str, products_df: pd.DataFrame, product_vectors: Dict
 def search_products(query: str, products_df: pd.DataFrame, product_vectors: Dict[int, np.ndarray],
                    embeddings_dict: Dict[str, np.ndarray], top_n: int = 20) -> List[Dict]:
     """
-    Multi-strategy product search with fusion scoring.
-
-    Combines:
-    - Strategy 1: Normalized string matching (exact + fuzzy)
-    - Strategy 2: Semantic similarity using GloVe embeddings
-
-    String matches get score=1.0, semantic matches get their cosine score.
-    Results are deduplicated, sorted by score descending, and limited to top_n.
+    Multi-strategy product search with improved relevancy ranking.
 
     Args:
         query: raw user search string
-        products_df: DataFrame with one row per product (product_id, brand_name, product_title,
-                     price, avg_product_rating, product_rating_count, product_url, review_count)
-        product_vectors: dict[product_id → np.array(300)]
-        embeddings_dict: dict[word → np.array(300)] (full GloVe, 400K words)
-        top_n: max results to return
+        products_df: DataFrame with product information
+        product_vectors: dict mapping product_id to GloVe vectors
+        embeddings_dict: full GloVe embeddings dictionary
+        top_n: maximum number of results to return
 
     Returns:
-        list of dicts: [{product_id, brand_name, product_title, price, avg_product_rating,
-                        review_count, score}, ...]
+        List of dictionaries containing product details and relevancy scores
     """
     if not query or not query.strip():
         return []
 
-    # Strategy 1: String matching
-    string_match_ids = normalized_string_match(query, products_df)
-
-    # Strategy 2: Semantic search
+    # Get results from both strategies (now both return scores)
+    string_results = normalized_string_match(query, products_df)
     semantic_results = semantic_search(query, products_df, product_vectors, embeddings_dict)
 
-    # Fusion: combine scores
-    # String matches get score=1.0, semantic matches get their cosine score
-    # If a product appears in both, take max score
+    # Fusion: combine scores using max
     all_scores = {}
-
-    for product_id in string_match_ids:
-        all_scores[product_id] = 1.0
-
-    for product_id, score in semantic_results.items():
-        if product_id in all_scores:
-            all_scores[product_id] = max(all_scores[product_id], score)
+    for pid, score in string_results.items():
+        all_scores[pid] = score
+    
+    for pid, score in semantic_results.items():
+        if pid in all_scores:
+            all_scores[pid] = max(all_scores[pid], score)
         else:
-            all_scores[product_id] = score
+            all_scores[pid] = score
 
     # Build result list with product details
     results = []
@@ -174,10 +187,9 @@ def search_products(query: str, products_df: pd.DataFrame, product_vectors: Dict
             'score': score
         })
 
-    # Sort by score descending and limit to top_n
+    # Sort by score descending and limit
     results.sort(key=lambda x: x['score'], reverse=True)
     return results[:top_n]
-
 
 def get_product_details(product_id: int, products_df: pd.DataFrame, reviews_df: pd.DataFrame) -> Optional[Dict]:
     """
