@@ -1063,6 +1063,32 @@ h1, h2, h3 {
     margin-bottom: 16px !important;
 }
 
+/* Multiselect dropdown tokens/chips — Shopee style */
+.token {
+    background: #EE4D2D !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 2px !important;
+    font-size: 13px !important;
+    padding: 4px 8px !important;
+}
+
+.token .token-remove {
+    color: #fff !important;
+}
+
+.token-remove:hover {
+    color: rgba(255,255,255,0.7) !important;
+}
+
+/* Dropdown option list — highlight selected items */
+.dropdown-option.selected,
+ul[role="listbox"] li.selected,
+ul[role="listbox"] li[aria-selected="true"] {
+    background: #FFF5F2 !important;
+    color: #EE4D2D !important;
+}
+
 /* Plot component labels — Shopee style */
 .plot-container .label-wrap {
     background: linear-gradient(135deg, #FFF5F2, #fff) !important;
