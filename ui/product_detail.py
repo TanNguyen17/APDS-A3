@@ -1,5 +1,7 @@
 import os
 import html as html_module
+from datetime import datetime
+from dateutil import parser as dateutil_parser
 
 
 def render_product_detail(product_id, ctx, target_elem_id="selected_product_id"):
@@ -20,7 +22,8 @@ def render_product_detail(product_id, ctx, target_elem_id="selected_product_id")
     title = product_row['product_title']
     price = product_row['price']
     rating = product_row['avg_product_rating']
-    rating_count = product_row.get('product_rating_count', 0)
+    rating_count = int(product_row.get('review_count', 0))
+    buyer_count = int(product_row.get('buyer_count', 0))
     product_url = product_row.get('product_url', '')
 
     # Get product tags (from pre-indexed reviews)
@@ -58,11 +61,20 @@ def render_product_detail(product_id, ctx, target_elem_id="selected_product_id")
     if product_url and str(product_url).startswith('http'):
         url_html = f'<a href="{product_url}" target="_blank" class="pdp-link">View on Nykaa →</a>'
 
+    review_btn_html = f'<button class="pdp-review-btn" onclick="switchToReviewTab({product_id})">Write a Review</button>'
+
     # Get all reviews from pre-indexed dict + new reviews (fast, no DataFrame filter)
     all_reviews = reviews_by_product.get(product_id, []) + [r for r in new_reviews if r.get('product_id') == product_id]
 
-    # Build reviews list HTML (show all, sorted by rating desc)
-    all_reviews_sorted = sorted(all_reviews, key=lambda r: float(r.get('review_rating', 0) or r.get('rating', 0) or 0), reverse=True)
+    def _parse_date(r):
+        d = str(r.get('review_date', '') or '')
+        try:
+            return dateutil_parser.parse(d)
+        except Exception:
+            return datetime.min
+
+    # Build reviews list HTML (show all, sorted by newest first)
+    all_reviews_sorted = sorted(all_reviews, key=_parse_date, reverse=True)
     display_reviews = all_reviews_sorted
 
     # Compute rating breakdown for filter bar
@@ -71,6 +83,13 @@ def render_product_detail(product_id, ctx, target_elem_id="selected_product_id")
         rv = int(float(r.get('review_rating', 0) or r.get('rating', 0) or 0))
         if rv in rating_counts:
             rating_counts[rv] += 1
+
+    _star_svg_filled = '<svg width="14" height="14" viewBox="0 0 24 24" fill="#EE4D2D" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>'
+    _star_svg_outline = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#EE4D2D" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>'
+
+    def shopee_stars(rating_val):
+        full = int(rating_val)
+        return _star_svg_filled * full + _star_svg_outline * (5 - full)
 
     reviews_items_html = ''
     for review in display_reviews:
@@ -85,6 +104,7 @@ def render_product_detail(product_id, ctx, target_elem_id="selected_product_id")
 
         buyer_badge = '<span class="shopee-buyer-badge">Verified Buyer</span>' if is_buyer in [1, True, 'True'] else ''
         title_sort = r_title.lower().replace('"', '').replace("'", '')
+        r_date_iso = str(review.get('review_date', '') or '')
 
         # Meta info line (skin type, skin tone)
         meta_parts = []
@@ -94,16 +114,8 @@ def render_product_detail(product_id, ctx, target_elem_id="selected_product_id")
             meta_parts.append(f'Skin tone: <b>{html_module.escape(skin_tone)}</b>')
         meta_html = f'<div class="shopee-review-meta">{" | ".join(meta_parts)}</div>' if meta_parts else ''
 
-        # Star color: Shopee uses red stars
-        def shopee_stars(rating_val):
-            full = int(rating_val)
-            empty = 5 - full
-            filled = '<svg width="14" height="14" viewBox="0 0 24 24" fill="#EE4D2D" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>'
-            outline = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#EE4D2D" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>'
-            return filled * full + outline * empty
-
         reviews_items_html += f'''
-        <div class="shopee-review-item" data-rating="{r_rating}" data-title="{title_sort}">
+        <div class="shopee-review-item" data-rating="{r_rating}" data-title="{title_sort}" data-date="{r_date_iso}">
             <div class="shopee-review-header">
                 <div class="shopee-review-avatar">{r_author[0].upper() if r_author else 'A'}</div>
                 <div class="shopee-review-user-info">
@@ -170,9 +182,11 @@ def render_product_detail(product_id, ctx, target_elem_id="selected_product_id")
                 <div class="pdp-brand">{brand}</div>
                 <h2 class="pdp-title">{title}</h2>
                 <div class="pdp-price">₹{price:.2f}</div>
-                <div class="pdp-rating">{stars_html(rating)} {rating:.1f} ({rating_count} ratings)</div>
+                <div class="pdp-rating">{stars_html(rating)} {rating:.1f} ({rating_count} reviews)</div>
                 <div class="pdp-meta">{len(all_reviews)} customer reviews</div>
-                {url_html}
+                <div class="pdp-meta">{buyer_count:,} sold</div>
+                <div class="pdp-actions">{url_html}</div>
+                <div class="pdp-actions">{review_btn_html}</div>
                 {tags_html}
             </div>
         </div>
@@ -196,7 +210,8 @@ def render_product_detail(product_id, ctx, target_elem_id="selected_product_id")
             </div>
             <div class="shopee-sort-bar">
                 <span style="font-size:13px;color:#757575;">Sort by:</span>
-                <button class="shopee-sort-btn active" onclick="sortReviews('rating-desc', this)">Rating ↓</button>
+                <button class="shopee-sort-btn active" onclick="sortReviews('newest', this)">Newest</button>
+                <button class="shopee-sort-btn" onclick="sortReviews('rating-desc', this)">Rating ↓</button>
                 <button class="shopee-sort-btn" onclick="sortReviews('rating-asc', this)">Rating ↑</button>
                 <button class="shopee-sort-btn" onclick="sortReviews('alpha-az', this)">A→Z</button>
             </div>
