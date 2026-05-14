@@ -17,7 +17,7 @@ from core.data_loader import new_reviews
 def build_sentiment_tab(product_choices, df, products_df):
     """Build the Sentiment Insights tab UI and wire event handlers."""
 
-    with gr.Tab("📊 Sentiment Insights"):
+    with gr.Tab("Sentiment Insights", elem_id="tab-sentiment", elem_classes=["glamreview-tab"]):
         gr.Markdown("### Analyze sentiment and key terms from product reviews")
         gr.Markdown("Select one or more products to analyze and compare their sentiment.")
 
@@ -78,7 +78,7 @@ def build_sentiment_tab(product_choices, df, products_df):
 
             fig = make_subplots(
                 rows=rows, cols=cols,
-                subplot_titles=[f"{short_titles[i]} (n={breakdowns[i]['total']})" for i in range(n)],
+                subplot_titles=[f"{short_titles[i]} (n={breakdowns[i]['total']} reviews)" for i in range(n)],
                 vertical_spacing=0.22,
                 horizontal_spacing=0.12,
             )

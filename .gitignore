@@ -3,6 +3,12 @@
 *.zip
 *.gz
 
+# Large model/cache files (exceed GitHub 100MB limit)
+models/model_b_bow_meta.pkl
+models/model_c_glove_meta.pkl
+models/glove_cache.pkl
+notebooks/glove_cache.pkl
+
 # Large text data
 notebooks/glove.6B.300d.txt
 notebooks/unweighted_vectors.txt
@@ -36,3 +42,5 @@ results/
 .claude/
 .DS_Store
 CLAUDE.md
+AGENTS.md
+.mcp.json

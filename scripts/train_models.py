@@ -29,6 +29,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.neural_network import MLPClassifier
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.impute import SimpleImputer
@@ -207,15 +208,15 @@ def main():
     print(f"  Test:  {len(X_test):,} samples")
 
     # -------------------------------------------------------------------------
-    # STEP 3: Train Model A (BoW text-only)
+    # STEP 3: Train Model A (Text only: MLP + Unweighted GloVe)
     # -------------------------------------------------------------------------
-    print_section("STEP 3: Training Model A (BoW + Logistic Regression)")
+    print_section("STEP 3: Training Model A (Text only: MLP + Unweighted GloVe)")
 
     print("Building pipeline...")
     model_a = ImbPipeline([
-        ('vec', CountVectorizer(vocabulary=vocab_dict)),
+        ('vec', UnweightedVectorTransformer(embeddings_dict)),
         ('smote', SMOTE(random_state=42)),
-        ('clf', LogisticRegression(max_iter=1000, random_state=42, solver='liblinear'))
+        ('clf', MLPClassifier(hidden_layer_sizes=(256, 128), max_iter=200, random_state=42, early_stopping=True))
     ])
 
     print("Training Model A...")
@@ -229,9 +230,9 @@ def main():
     print(classification_report(y_test, y_pred_a, target_names=['Non-buyer', 'Buyer']))
 
     # -------------------------------------------------------------------------
-    # STEP 4: Train Model B (BoW + title + metadata)
+    # STEP 4: Train Model B (Text + Title: MLP + BoW)
     # -------------------------------------------------------------------------
-    print_section("STEP 4: Training Model B (BoW + Title + Metadata + LR)")
+    print_section("STEP 4: Training Model B (Text + Title: MLP + BoW)")
 
     meta_cols = ['price', 'avg_product_rating', 'product_rating_count', 'review_rating', 'brand_encoded']
 
@@ -240,13 +241,9 @@ def main():
         ('features', ColumnTransformer([
             ('text', CountVectorizer(vocabulary=vocab_dict), 'processed_review_text'),
             ('title', CountVectorizer(), 'processed_title'),
-            ('meta', Pipeline([
-                ('imputer', SimpleImputer(strategy='constant', fill_value=0)),
-                ('scaler', StandardScaler())
-            ]), meta_cols)
         ])),
         ('smote', SMOTE(random_state=42)),
-        ('clf', LogisticRegression(max_iter=1000, random_state=42, solver='liblinear'))
+        ('clf', MLPClassifier(hidden_layer_sizes=(256, 128), max_iter=200, random_state=42, early_stopping=True))
     ])
 
     print("Training Model B...")
@@ -260,22 +257,22 @@ def main():
     print(classification_report(y_test, y_pred_b, target_names=['Non-buyer', 'Buyer']))
 
     # -------------------------------------------------------------------------
-    # STEP 5: Train Model C (GloVe weighted + metadata, Logistic Regression)
+    # STEP 5: Train Model C (Text + Title + Extra: Random Forest + Unweighted GloVe)
     # -------------------------------------------------------------------------
-    print_section("STEP 5: Training Model C (GloVe Weighted + Metadata + LR)")
+    print_section("STEP 5: Training Model C (Text + Title + Extra: RF + Unweighted GloVe)")
 
     print("Building pipeline with WeightedVectorTransformer...")
     model_c = ImbPipeline([
         ('features', ColumnTransformer([
-            ('text', WeightedVectorTransformer(embeddings_dict), 'processed_review_text'),
-            ('title', WeightedVectorTransformer(embeddings_dict), 'processed_title'),
+            ('text', UnweightedVectorTransformer(embeddings_dict), 'processed_review_text'),
+            ('title', UnweightedVectorTransformer(embeddings_dict), 'processed_title'),
             ('meta', Pipeline([
                 ('imputer', SimpleImputer(strategy='constant', fill_value=0)),
                 ('scaler', StandardScaler())
             ]), meta_cols)
         ])),
         ('smote', SMOTE(random_state=42)),
-        ('clf', LogisticRegression(max_iter=1000, random_state=42, solver='liblinear'))
+        ('clf', RandomForestClassifier(n_estimators=200, random_state=42, n_jobs=-1))
     ])
 
     print("Training Model C...")

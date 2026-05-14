@@ -7,17 +7,18 @@ from core.recommender import get_recommendations
 
 
 def build_recommendation_tab(product_choices, products_df, product_vectors, ctx):
-    """Build the Similar Products tab UI and wire event handlers."""
+    """Build the Find Similar Products tab UI and wire event handlers."""
 
     images_dir = ctx['images_dir']
 
-    with gr.Tab("🔗 Similar Products"):
+    with gr.Tab("Find Similar Products", elem_id="tab-recommendations", elem_classes=["glamreview-tab"]):
         gr.Markdown("### Find products similar to one you like")
 
         rec_product = gr.Dropdown(
             choices=product_choices,
             label="Select a Product",
-            filterable=True
+            filterable=True,
+            elem_classes=["dropdown-container"]
         )
 
         find_similar_btn = gr.Button("Find Similar Products", variant="primary")

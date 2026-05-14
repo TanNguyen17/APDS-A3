@@ -10,15 +10,15 @@ PRODUCTS_PER_PAGE = 20
 
 
 def build_search_tab(products_df, product_vectors, embeddings_dict, ctx):
-    """Build the Search Products tab UI and wire event handlers."""
+    """Build the Product Catalog tab UI and wire event handlers."""
 
-    with gr.Tab("🔍 Search Products"):
+    with gr.Tab("Product Catalog", elem_id="tab-search", elem_classes=["glamreview-tab"]):
         gr.Markdown("### Find products by brand or keyword")
 
         search_query = gr.Textbox(
             placeholder="Search by brand or keyword...",
             label="",
-            show_label=False
+            show_label=False,
         )
 
         search_btn = gr.Button("Search", variant="primary")
