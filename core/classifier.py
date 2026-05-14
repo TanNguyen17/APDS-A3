@@ -5,11 +5,17 @@ Task 2: Buyer/Non-Buyer prediction using 3-model ensemble with soft voting.
 
 This module provides prediction functionality for the buyer/non-buyer classification
 using three pre-trained models:
-- Model A: BoW + Logistic Regression (text only)
-- Model B: BoW + metadata + Logistic Regression
-- Model C: GloVe embeddings + metadata + Logistic Regression
+- Model A: MLP + GloVe embeddings (text only, unweighted mean pooling)
+- Model B: MLP + BoW (review text + title, no metadata)
+- Model C: Random Forest + GloVe embeddings (text + title, unweighted mean pooling) + metadata
 
 The final prediction uses soft voting (probability averaging) across all three models.
+
+predict_proba Implementation Notes:
+- All models use predict_proba() which returns [P(non-buyer), P(buyer)] array for binary classification
+- We extract index [1] to get P(buyer) probability used in the ensemble
+- Soft voting averages these three P(buyer) probabilities to produce the final prediction
+- Final prediction: buyer if average probability >= 0.5, non-buyer otherwise
 """
 
 import pandas as pd
@@ -69,9 +75,9 @@ def predict_buyer(review_text, review_title, review_rating, product_info,
         # Unseen brand or missing brand_name -> fallback to 0
         brand_encoded = 0
 
-    # Step 3: Model A prediction (text only)
+    # Step 3: Model A prediction (MLP + GloVe embeddings, text only)
     model_a_proba = model_a.predict_proba([processed_text])[0]
-    model_a_prob = model_a_proba[1]  # P(buyer)
+    model_a_prob = model_a_proba[1]  # Extract P(buyer) probability (index 1)
     model_a_pred = 1 if model_a_prob >= 0.5 else 0
 
     # Step 4: Construct DataFrame for Model B and Model C
@@ -85,17 +91,17 @@ def predict_buyer(review_text, review_title, review_rating, product_info,
         'brand_encoded': [brand_encoded]
     })
 
-    # Step 5: Model B prediction (BoW + metadata)
+    # Step 5: Model B prediction (MLP + BoW, text + title only)
     model_b_proba = model_b.predict_proba(input_df)[0]
-    model_b_prob = model_b_proba[1]  # P(buyer)
+    model_b_prob = model_b_proba[1]  # Extract P(buyer) probability (index 1)
     model_b_pred = 1 if model_b_prob >= 0.5 else 0
 
-    # Step 6: Model C prediction (GloVe + metadata)
+    # Step 6: Model C prediction (Random Forest + GloVe embeddings + metadata)
     model_c_proba = model_c.predict_proba(input_df)[0]
-    model_c_prob = model_c_proba[1]  # P(buyer)
+    model_c_prob = model_c_proba[1]  # Extract P(buyer) probability (index 1)
     model_c_pred = 1 if model_c_prob >= 0.5 else 0
 
-    # Step 7: Fusion via soft voting (average probabilities)
+    # Step 7: Ensemble fusion via soft voting (simple average of P(buyer) probabilities)
     fused_prob = np.mean([model_a_prob, model_b_prob, model_c_prob])
     fused_pred = 1 if fused_prob >= 0.5 else 0
 
