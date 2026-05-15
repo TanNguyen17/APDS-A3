@@ -176,9 +176,9 @@ def load_pickled_models(base_path: str) -> Dict[str, Any]:
     print(f"Loading pickled models from {models_dir}/...")
 
     model_files = [
-        'model_a_bow.pkl',
-        'model_b_bow_meta.pkl',
-        'model_c_glove_meta.pkl',
+        'rf_bow_extra.pkl',
+        'rf_unweighted_extra.pkl',
+        'rf_weighted_extra.pkl',
         'label_encoder.pkl',
         'collocation_dict.pkl',
         'product_vectors.pkl'
