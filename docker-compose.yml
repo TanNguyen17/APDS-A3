@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  glamreview:
+    build: .
+    image: glamreview-app:latest
+    container_name: glamreview-container
+    ports:
+      - "7860:7860"
+    volumes:
+      # Mount local models folder to container /app/models
+      # This allows the app to load models without including them in the image
+      - ./models:/app/models
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: always

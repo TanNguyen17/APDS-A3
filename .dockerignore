@@ -1,0 +1,26 @@
+.git
+.gitignore
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.db
+.ipynb_checkpoints
+.DS_Store
+
+# Exclude models folder entirely (will be mounted via Volume)
+models/
+
+# Exclude large raw datasets/files
+notebooks/*.ipynb
+notebooks/glove.6B.300d.txt
+cosmetics_beauty_products_reviews.csv
+count_vectors.txt
+glove.6B.50d.txt
+unweighted_vectors.txt
+weighted_vectors.txt
+
+# Exclude environments
+venv
+.venv
+env
