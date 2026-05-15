@@ -22,7 +22,7 @@ def get_sentiment_breakdown(
 
     Args:
         product_id: Product identifier to filter reviews
-        df: Full reviews DataFrame with 'product_id' and 'review_rating' columns
+        df: Full reviews DataFrame with 'product_id' and 'text_sentiment' columns
         new_reviews: Optional DataFrame of new reviews to include
 
     Returns:
@@ -35,6 +35,11 @@ def get_sentiment_breakdown(
     if new_reviews is not None and not new_reviews.empty:
         new_product_reviews = new_reviews[new_reviews['product_id'] == product_id].copy()
         product_reviews = pd.concat([product_reviews, new_product_reviews], ignore_index=True)
+
+    if 'text_sentiment' not in product_reviews.columns:
+        product_reviews['text_sentiment'] = 'neutral'
+    else:
+        product_reviews['text_sentiment'] = product_reviews['text_sentiment'].fillna('neutral')
 
     total = len(product_reviews)
 
@@ -51,9 +56,9 @@ def get_sentiment_breakdown(
         }
 
     # Classify by rating
-    positive_count = len(product_reviews[product_reviews['review_rating'] >= 4])
-    neutral_count = len(product_reviews[product_reviews['review_rating'] == 3])
-    negative_count = len(product_reviews[product_reviews['review_rating'] <= 2])
+    positive_count = len(product_reviews[product_reviews['text_sentiment'] == 'positive'])
+    neutral_count = len(product_reviews[product_reviews['text_sentiment'] == 'neutral'])
+    negative_count = len(product_reviews[product_reviews['text_sentiment'] == 'negative'])
 
     return {
         'positive_count': positive_count,
@@ -94,13 +99,14 @@ def get_key_terms(
         new_product_reviews = new_reviews[new_reviews['product_id'] == product_id].copy()
         product_reviews = pd.concat([product_reviews, new_product_reviews], ignore_index=True)
 
+    if 'text_sentiment' not in product_reviews.columns:
+        product_reviews['text_sentiment'] = 'neutral'
+    else:
+        product_reviews['text_sentiment'] = product_reviews['text_sentiment'].fillna('neutral')
+
     # Filter by sentiment
-    if sentiment == 'positive':
-        sentiment_reviews = product_reviews[product_reviews['review_rating'] >= 4]
-    elif sentiment == 'neutral':
-        sentiment_reviews = product_reviews[product_reviews['review_rating'] == 3]
-    elif sentiment == 'negative':
-        sentiment_reviews = product_reviews[product_reviews['review_rating'] <= 2]
+    if sentiment in ('positive','neutral', 'negative'):
+        sentiment_reviews = product_reviews[product_reviews['text_sentiment'] == sentiment]
     else:
         raise ValueError(f"Invalid sentiment: {sentiment}. Must be 'positive', 'neutral', or 'negative'")
 
@@ -124,7 +130,7 @@ def get_key_terms(
     return word_counter.most_common(top_n)
 
 
-COMPARISON_COLORS = ['#EE4D2D', '#3498db', '#2ecc71', '#9b59b6', '#f39c12']
+COMPARISON_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#9b59b6', '#f39c12']
 
 
 def create_multi_comparison_chart(
@@ -146,8 +152,8 @@ def create_multi_comparison_chart(
             name=f'{name} (n={breakdown["total"]} reviews)',
             marker_color=COMPARISON_COLORS[i % len(COMPARISON_COLORS)],
             text=[f'{p:.1f}%' for p in pcts],
-            textposition='inside',
-            textfont=dict(color='white', size=11)
+            textposition='outside',
+            textfont=dict(color='black', size=11)
         ))
 
     n = len(breakdowns)

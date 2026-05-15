@@ -236,6 +236,93 @@ def compute_product_aggregations(df: pd.DataFrame) -> pd.DataFrame:
     print(f"  ✓ Aggregated {len(products_df):,} unique products in {elapsed:.2f}s")
     return products_df
 
+def compute_text_sentiment_cached(
+        df: pd.DataFrame,
+        model_c: Any,
+        label_encoder: Any,
+        base_path: str,
+        pos_threshold: float = 0.60,
+        neg_threshold: float = 0.40,
+) -> pd.DataFrame:
+    cached_path = os.path.join(base_path, 'models', 'text_sentiment_cache.pkl')
+    """Pre-compute text sentiments and cache."""
+
+    # Fast path: Load from cached text sentiments if it exists and match current df size
+    if os.path.exists(cached_path):
+        print(f"Loading text sentiments from cache ({cached_path})...")
+        start = time.time()
+        with open(cached_path, 'rb') as f:
+            cached = pickle.load(f)
+        
+
+        if len(cached) == len(df):
+            df['text_sentiment'] = cached
+            elapsed = time.time() - start
+            print(f"Loaded {len(cached):,} text sentiments in {elapsed:.2f}s (cached)")
+            return df
+        else:
+            print(f"Cache size mismatch ({len(cached)} vs {len(df)})")
+
+
+    
+    # Predict on entire dataframe
+    print("Computing text-based sentiments for all reviews using RF + unweighted + metadata")
+    print("  (First run — will cache for faster future loads)")
+
+    start = time.time()
+    input_df = pd.DataFrame({
+        'processed_review_text': df['processed_review_text'].fillna('').astype(str),
+        'processed_title': df['processed_title'].fillna('').astype(str) if 'processed_title' in df.columns else '',
+        'price': df['price'],
+        'avg_product_rating': df['avg_product_rating'],
+        'product_rating_count': df['product_rating_count'],
+        'review_rating': df['review_rating'],
+        'brand_encoded': _encode_brands(df['brand_name'], label_encoder),
+    })
+
+    probs_buyer = model_c.predict_proba(input_df)[:,1]
+
+    sentiments = np.where(
+        probs_buyer >= pos_threshold, 'positive',
+        np.where(probs_buyer <= neg_threshold, 'negative', 'neutral')
+    )
+
+    df['text_sentiment'] = sentiments
+
+    elapsed = time.time() - start
+    print(f"Computed text sentiments in {elapsed:.2f}s (cached)")
+
+    pos = (sentiments == 'positive').sum()
+    neu = (sentiments == 'neutral').sum()
+    neg = (sentiments == 'negative').sum()
+
+    total = len(sentiments)
+    print(f"positive={pos:,} ({pos/total*100:.1f}%)")
+    print(f"neutral={neu:,} ({neu/total*100:.1f}%)")
+    print(f"negative={neg:,} ({neg/total*100:.1f}%)")
+
+    print(f"Saving cache to {cached_path}")
+    with open(cached_path, 'wb') as f:
+        pickle.dump(sentiments, f, protocol=4)
+    
+    print("Text sentiments cache saved")
+
+    return df
+
+
+def _encode_brands(brand_series: pd.Series, label_encoder: Any) -> np.ndarray:
+    """
+    Encode brand names into integers, unseen brands to 0
+    """
+    known_brands = set(label_encoder.classes_)
+    encoded = np.zeros(len(brand_series), dtype=int)
+    for i, brand in enumerate(brand_series.fillna('unknown')):
+        if brand in known_brands:
+            encoded[i] = label_encoder.transform([brand])[0]
+        # else: leave unseen brands as 0
+
+    return encoded
+
 
 def build_reviews_by_product(df: pd.DataFrame) -> Dict[str, List[Dict[str, Any]]]:
     """
@@ -281,6 +368,7 @@ def load_all() -> Dict[str, Any]:
     stopwords = load_stopwords(base_path)
     glove_embeddings = load_glove_embeddings(base_path)
     models = load_pickled_models(base_path)
+    df = compute_text_sentiment_cached(df, models['model_c_glove_meta'], models['label_encoder'], base_path)
     products_df = compute_product_aggregations(df)
     reviews_by_product = build_reviews_by_product(df)
 
