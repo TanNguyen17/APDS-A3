@@ -266,7 +266,7 @@ def compute_text_sentiment_cached(
 
     
     # Predict on entire dataframe
-    print("Computing text-based sentiments for all reviews using RF + unweighted + metadata")
+    print("Computing text-based sentiments for all reviews using RF + unweighted + extra")
     print("  (First run — will cache for faster future loads)")
 
     start = time.time()
@@ -368,7 +368,7 @@ def load_all() -> Dict[str, Any]:
     stopwords = load_stopwords(base_path)
     glove_embeddings = load_glove_embeddings(base_path)
     models = load_pickled_models(base_path)
-    df = compute_text_sentiment_cached(df, models['model_c_glove_meta'], models['label_encoder'], base_path)
+    df = compute_text_sentiment_cached(df, models['rf_unweighted_extra'], models['label_encoder'], base_path)
     products_df = compute_product_aggregations(df)
     reviews_by_product = build_reviews_by_product(df)
 
