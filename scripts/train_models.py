@@ -2,10 +2,10 @@
 """
 Train ML models for cosmetics review buyer/non-buyer prediction.
 
-This script trains 3 models and saves 6 pickle files to models/:
-1. model_a_bow.pkl - BoW text-only + Logistic Regression
-2. model_b_bow_meta.pkl - BoW + title + metadata + Logistic Regression
-3. model_c_glove_meta.pkl - GloVe weighted + metadata + Logistic Regression
+This script trains 3 high-performing models and saves 6 pickle files to models/:
+1. rf_bow_extra.pkl - BoW + Extra Metadata + Random Forest
+2. rf_unweighted_extra.pkl - Unweighted GloVe + Extra Metadata + Random Forest
+3. rf_weighted_extra.pkl - Weighted GloVe + Extra Metadata + Random Forest
 4. label_encoder.pkl - Brand name encoder
 5. collocation_dict.pkl - Bigram collocation dictionary
 6. product_vectors.pkl - Product-level GloVe embeddings
@@ -208,80 +208,87 @@ def main():
     print(f"  Test:  {len(X_test):,} samples")
 
     # -------------------------------------------------------------------------
-    # STEP 3: Train Model A (Text only: MLP + Unweighted GloVe)
+    # STEP 3-5: Train Top 3 Models (Random Forest Ensemble)
     # -------------------------------------------------------------------------
-    print_section("STEP 3: Training Model A (Text only: MLP + Unweighted GloVe)")
+    print_section("STEP 3-5: Training Top 3 Random Forest Models")
 
-    print("Building pipeline...")
-    model_a = ImbPipeline([
-        ('vec', UnweightedVectorTransformer(embeddings_dict)),
-        ('smote', SMOTE(random_state=42)),
-        ('clf', MLPClassifier(hidden_layer_sizes=(256, 128), max_iter=200, random_state=42, early_stopping=True))
+    # Configuration for the new models
+    RF_CONFIG = {'n_estimators': 200, 'random_state': 42, 'n_jobs': -1}
+    extra_cols = ['price', 'avg_product_rating', 'product_rating_count', 'review_rating', 'brand_encoded']
+    
+    meta_pipe = Pipeline([
+        ('imputer', SimpleImputer(strategy='constant', fill_value=0)),
+        ('scaler', StandardScaler())
     ])
 
-    print("Training Model A...")
+    print("Building pipelines for Top 3 Models...")
+
+    # Model A: BoW (Text+Title+Extra) + RF
+    model_a = ImbPipeline([
+        ('features', ColumnTransformer([
+            ('text',  CountVectorizer(vocabulary=vocab_dict), 'processed_review_text'),
+            ('title', CountVectorizer(), 'processed_title'),
+            ('meta',  meta_pipe, extra_cols)
+        ])),
+        ('smote', SMOTE(random_state=42)),
+        ('clf', RandomForestClassifier(**RF_CONFIG))
+    ])
+
+    # Model B: Unweighted GloVe (Text+Title+Extra) + RF
+    model_b = ImbPipeline([
+        ('features', ColumnTransformer([
+            ('text',  UnweightedVectorTransformer(embeddings_dict), 'processed_review_text'),
+            ('title', UnweightedVectorTransformer(embeddings_dict), 'processed_title'),
+            ('meta',  meta_pipe, extra_cols)
+        ])),
+        ('smote', SMOTE(random_state=42)),
+        ('clf', RandomForestClassifier(**RF_CONFIG))
+    ])
+
+    # Model C: Weighted GloVe (Text+Title+Extra) + RF
+    model_c = ImbPipeline([
+        ('features', ColumnTransformer([
+            ('text',  WeightedVectorTransformer(embeddings_dict), 'processed_review_text'),
+            ('title', WeightedVectorTransformer(embeddings_dict), 'processed_title'),
+            ('meta',  meta_pipe, extra_cols)
+        ])),
+        ('smote', SMOTE(random_state=42)),
+        ('clf', RandomForestClassifier(**RF_CONFIG))
+    ])
+
+    # Training models
+    print("\nTraining Model A (BoW + RF)...")
     start_a = time.time()
-    model_a.fit(X_train['processed_review_text'], y_train)
+    model_a.fit(X_train, y_train)
     train_a_time = time.time() - start_a
     print(f"  Training took {train_a_time:.1f}s")
 
-    print("\nEvaluating Model A on test set...")
-    y_pred_a = model_a.predict(X_test['processed_review_text'])
-    print(classification_report(y_test, y_pred_a, target_names=['Non-buyer', 'Buyer']))
-
-    # -------------------------------------------------------------------------
-    # STEP 4: Train Model B (Text + Title: MLP + BoW)
-    # -------------------------------------------------------------------------
-    print_section("STEP 4: Training Model B (Text + Title: MLP + BoW)")
-
-    meta_cols = ['price', 'avg_product_rating', 'product_rating_count', 'review_rating', 'brand_encoded']
-
-    print("Building pipeline with ColumnTransformer...")
-    model_b = ImbPipeline([
-        ('features', ColumnTransformer([
-            ('text', CountVectorizer(vocabulary=vocab_dict), 'processed_review_text'),
-            ('title', CountVectorizer(), 'processed_title'),
-        ])),
-        ('smote', SMOTE(random_state=42)),
-        ('clf', MLPClassifier(hidden_layer_sizes=(256, 128), max_iter=200, random_state=42, early_stopping=True))
-    ])
-
-    print("Training Model B...")
+    print("\nTraining Model B (Unweighted GloVe + RF)...")
     start_b = time.time()
     model_b.fit(X_train, y_train)
     train_b_time = time.time() - start_b
     print(f"  Training took {train_b_time:.1f}s")
 
-    print("\nEvaluating Model B on test set...")
-    y_pred_b = model_b.predict(X_test)
-    print(classification_report(y_test, y_pred_b, target_names=['Non-buyer', 'Buyer']))
-
-    # -------------------------------------------------------------------------
-    # STEP 5: Train Model C (Text + Title + Extra: Random Forest + Unweighted GloVe)
-    # -------------------------------------------------------------------------
-    print_section("STEP 5: Training Model C (Text + Title + Extra: RF + Unweighted GloVe)")
-
-    print("Building pipeline with WeightedVectorTransformer...")
-    model_c = ImbPipeline([
-        ('features', ColumnTransformer([
-            ('text', UnweightedVectorTransformer(embeddings_dict), 'processed_review_text'),
-            ('title', UnweightedVectorTransformer(embeddings_dict), 'processed_title'),
-            ('meta', Pipeline([
-                ('imputer', SimpleImputer(strategy='constant', fill_value=0)),
-                ('scaler', StandardScaler())
-            ]), meta_cols)
-        ])),
-        ('smote', SMOTE(random_state=42)),
-        ('clf', RandomForestClassifier(n_estimators=200, random_state=42, n_jobs=-1))
-    ])
-
-    print("Training Model C...")
+    print("\nTraining Model C (Weighted GloVe + RF)...")
     start_c = time.time()
     model_c.fit(X_train, y_train)
     train_c_time = time.time() - start_c
     print(f"  Training took {train_c_time:.1f}s")
 
-    print("\nEvaluating Model C on test set...")
+    # Evaluation
+    print("\n" + "="*40)
+    print("EVALUATION ON TEST SET")
+    print("="*40)
+
+    print("\nEvaluating Model A (BoW + RF):")
+    y_pred_a = model_a.predict(X_test)
+    print(classification_report(y_test, y_pred_a, target_names=['Non-buyer', 'Buyer']))
+
+    print("\nEvaluating Model B (Unweighted GloVe + RF):")
+    y_pred_b = model_b.predict(X_test)
+    print(classification_report(y_test, y_pred_b, target_names=['Non-buyer', 'Buyer']))
+
+    print("\nEvaluating Model C (Weighted GloVe + RF):")
     y_pred_c = model_c.predict(X_test)
     print(classification_report(y_test, y_pred_c, target_names=['Non-buyer', 'Buyer']))
 
@@ -321,9 +328,9 @@ def main():
 
     # Save all artifacts
     artifacts = [
-        ('models/model_a_bow.pkl', model_a, 'Model A (BoW)'),
-        ('models/model_b_bow_meta.pkl', model_b, 'Model B (BoW+Meta)'),
-        ('models/model_c_glove_meta.pkl', model_c, 'Model C (GloVe+Meta)'),
+        ('models/rf_bow_extra.pkl', model_a, 'Model A (BoW + Extra + RF)'),
+        ('models/rf_unweighted_extra.pkl', model_b, 'Model B (Unweighted GloVe + Extra + RF)'),
+        ('models/rf_weighted_extra.pkl', model_c, 'Model C (Weighted GloVe + Extra + RF)'),
         ('models/label_encoder.pkl', le, 'Label Encoder'),
         ('models/collocation_dict.pkl', colloc_dict, 'Collocation Dictionary'),
         ('models/product_vectors.pkl', product_vectors, 'Product Vectors')
