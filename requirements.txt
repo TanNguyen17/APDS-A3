@@ -9,3 +9,4 @@ imbalanced-learn
 Pillow
 requests
 beautifulsoup4
+plotly

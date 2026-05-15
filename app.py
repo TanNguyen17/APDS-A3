@@ -280,12 +280,12 @@ def render_confirm_page(review: dict) -> str:
     <p class="description-block">{r_text}</p>
   </div>
   <div class="prediction-box">
-    Based on your review, will you buy this product?<br>
+    Based on your review, would you buy this product?<br>
     Our prediction: <strong>{pred_display}</strong>
   </div>
   <form method="post" action="/reviews/confirm/{temp_id}">
     <div class="question-section">
-      <p>Do you buy this item?</p>
+      <p>Would you buy this item?</p>
       <div class="radio-group">
         <label><input type="radio" name="chosen_label" value="Buyer" {yes_checked}> Yes</label>
         <label><input type="radio" name="chosen_label" value="Non-Buyer" {no_checked}> No</label>

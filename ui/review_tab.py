@@ -9,9 +9,9 @@ from core.data_loader import add_review
 def build_review_tab(product_choices, products_df, models, stop_words, ctx):
     """Build the Write a Review tab UI and wire event handlers."""
 
-    model_a = models['model_a_bow']
-    model_b = models['model_b_bow_meta']
-    model_c = models['model_c_glove_meta']
+    model_a = models['rf_bow_extra']
+    model_b = models['rf_unweighted_extra']
+    model_c = models['rf_weighted_extra']
     label_encoder = models['label_encoder']
     colloc_dict = models['collocation_dict']
 
@@ -79,7 +79,7 @@ def build_review_tab(product_choices, products_df, models, stop_words, ctx):
             confirm_summary = gr.HTML("", elem_id="confirm-summary-html")
             confirm_buyer_html = gr.HTML("", elem_id="confirm-buyer-pills")
             confirm_buyer_val = gr.Textbox(
-                value="Yes, I bought it",
+                value="Yes, I would buy it",
                 elem_id="confirm_buyer_val",
                 visible=False,
                 elem_classes=["hidden-input"]
@@ -98,24 +98,24 @@ def build_review_tab(product_choices, products_df, models, stop_words, ctx):
         # ── Handlers ─────────────────────────────────────────────────────────
 
         def _buyer_pills_html(selected):
-            yes_active = "active" if selected == "Yes, I bought it" else ""
-            no_active = "active" if selected == "No, I didn't buy it" else ""
+            yes_active = "active" if selected == "Yes, I would buy it" else ""
+            no_active = "active" if selected == "No, I would not buy it" else ""
             return f"""
     <div style="margin-bottom:8px;">
-        <p style="font-size:14px;font-weight:500;color:#222;margin:0 0 12px;">Did you buy this product?</p>
+        <p style="font-size:14px;font-weight:500;color:#222;margin:0 0 12px;">Based on your experience, would you buy this product?</p>
         <div class="label-btn-group">
             <button class="label-btn {yes_active}"
                 onclick="(function(){{
-                    document.querySelectorAll('#confirm-buyer-pills .label-btn').forEach(b=>b.classList.remove('active'));
+                    this.parentElement.querySelectorAll('.label-btn').forEach(b=>b.classList.remove('active'));
                     this.classList.add('active');
-                    setGradioValue('#confirm_buyer_val', 'Yes, I bought it');
-                }}).call(this)">Yes, I bought it</button>
+                    setGradioValue('#confirm_buyer_val', 'Yes, I would buy it');
+                }}).call(this)">Yes, I would buy it</button>
             <button class="label-btn {no_active}"
                 onclick="(function(){{
-                    document.querySelectorAll('#confirm-buyer-pills .label-btn').forEach(b=>b.classList.remove('active'));
+                    this.parentElement.querySelectorAll('.label-btn').forEach(b=>b.classList.remove('active'));
                     this.classList.add('active');
-                    setGradioValue('#confirm_buyer_val', 'No, I didn\'t buy it');
-                }}).call(this)">No, I didn't buy it</button>
+                    setGradioValue('#confirm_buyer_val', 'No, I would not buy it');
+                }}).call(this)">No, I would not buy it</button>
         </div>
     </div>
     """
@@ -171,8 +171,8 @@ def build_review_tab(product_choices, products_df, models, stop_words, ctx):
 
             # Build summary HTML
             stars_filled = "★" * rating + "☆" * (5 - rating)
-            display_note = "You bought it" if pred_label == "Buyer" else "You didn't buy it"
-            radio_preselect = "Yes, I bought it" if pred_label == "Buyer" else "No, I didn't buy it"
+            display_note = "You would buy it" if pred_label == "Buyer" else "You would not buy it"
+            radio_preselect = "Yes, I would buy it" if pred_label == "Buyer" else "No, I would not buy it"
 
             summary_html = f"""
             <div class="model-card" style="margin-bottom:16px;">
@@ -187,8 +187,13 @@ def build_review_tab(product_choices, products_df, models, stop_words, ctx):
             </div>
             <div style="background:#e8f4fd;border:1px solid #b3d9f5;border-radius:8px;
                         padding:14px 18px;margin-bottom:8px;font-size:14px;color:#1a5276;">
-                Our prediction: <strong>'{display_note}'</strong>
-                <span style="color:#6c8fa8;font-style:italic;"> (you can override it)</span>
+                <div style="margin-bottom:4px;">Our prediction: <strong>'{display_note}'</strong></div>
+                <div style="font-size:12px;opacity:0.8;">
+                    Ensemble Confidence: 
+                    A: {pred_result['model_a_prob']:.0%} | 
+                    B: {pred_result['model_b_prob']:.0%} | 
+                    C: {pred_result['model_c_prob']:.0%}
+                </div>
             </div>
             """
 
@@ -226,7 +231,7 @@ def build_review_tab(product_choices, products_df, models, stop_words, ctx):
                     "<p style='color:#e74c3c;'>Session expired. Please go back and resubmit.</p>",
                 )
             review_dict = dict(state['review_dict'])
-            review_dict['is_buyer'] = 1 if buyer_val == "Yes, I bought it" else 0
+            review_dict['is_buyer'] = 1 if buyer_val == "Yes, I would buy it" else 0
             add_review(review_dict)
             product_id = review_dict.get('product_id', '')
             success_html = """
