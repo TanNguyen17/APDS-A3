@@ -44,3 +44,6 @@ results/
 CLAUDE.md
 AGENTS.md
 .mcp.json
+
+# Models
+models/*.pkl

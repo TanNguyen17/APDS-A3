@@ -11,6 +11,7 @@ PRODUCTS_PER_PAGE = 20
 
 def build_search_tab(products_df, product_vectors, embeddings_dict, ctx):
     """Build the Product Catalog tab UI and wire event handlers."""
+    inverted_index = ctx.get('inverted_index')
 
     with gr.Tab("Product Catalog", elem_id="tab-search", elem_classes=["glamreview-tab"]):
         gr.Markdown("### Find products by brand or keyword")
@@ -42,14 +43,14 @@ def build_search_tab(products_df, product_vectors, embeddings_dict, ctx):
             elem_classes=["hidden-input"]
         )
 
-        product_detail_panel = gr.HTML(visible=False)
+        product_detail_panel = gr.HTML(visible=True)
         back_to_results_btn = gr.Button("← Back to Search Results", visible=False)
 
         def on_search(query):
             if not query or query.strip() == "":
                 all_prods = products_df.to_dict('records')
             else:
-                all_prods = search_products(query, products_df, product_vectors, embeddings_dict, top_n=40)
+                all_prods = search_products(query, products_df, product_vectors, embeddings_dict, top_n=40, inverted_index=inverted_index)
 
             total = len(all_prods)
             page = 1

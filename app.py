@@ -10,6 +10,7 @@ from fastapi import Form
 from fastapi.responses import HTMLResponse
 from core.data_loader import load_all, new_reviews, set_df, get_df, pending_reviews, pop_pending_review, add_review
 from core.recommender import get_recommendations
+from core.search_engine import build_inverted_index
 from ui.search_tab import build_search_tab
 from ui.review_tab import build_review_tab
 from ui.recommendation_tab import build_recommendation_tab
@@ -46,12 +47,16 @@ reviews_by_product = data['reviews_by_product']
 
 product_vectors = models['product_vectors']
 
+print("Building search inverted index...")
+inverted_index = build_inverted_index(products_df)
+
 print("\n" + "=" * 70)
 print("DATA LOADED SUCCESSFULLY")
 print("=" * 70)
 print(f"Total products: {len(products_df):,}")
 print(f"Total reviews: {len(df):,}")
 print(f"GloVe vocabulary size: {len(embeddings_dict):,}")
+print(f"Inverted index terms: {len(inverted_index):,}")
 print("=" * 70 + "\n")
 
 # ============================================================================
@@ -75,6 +80,7 @@ ctx = {
     'images_dir': IMAGES_DIR,
     'product_vectors': product_vectors,
     'get_recommendations': get_recommendations,
+    'inverted_index': inverted_index,
 }
 
 # ============================================================================
