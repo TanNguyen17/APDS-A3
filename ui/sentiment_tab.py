@@ -19,12 +19,13 @@ def build_sentiment_tab(product_choices, df, products_df):
 
     with gr.Tab("Sentiment Insights", elem_id="tab-sentiment", elem_classes=["glamreview-tab"]):
         gr.Markdown("### Analyze sentiment and key terms from product reviews")
-        gr.Markdown("Select one or more products to analyze and compare their sentiment.")
+        gr.Markdown("Select 1-5 product(s) to analyze and compare their sentiment.")
 
         product_selector = gr.Dropdown(
             choices=product_choices,
-            label="Select Products",
+            label="Select Products (up to 5)",
             multiselect=True,
+            max_choices=5,
             filterable=True,
             value=[],
         )
@@ -39,8 +40,13 @@ def build_sentiment_tab(product_choices, df, products_df):
         def on_analyze(selected_products):
             if not selected_products:
                 return [None, None, ""]
+            
+            # Max selection limit safeguard by truncating
+            if len(selected_products) > 5:
+                gr.Warning("Maximum 5 products allowed. The chart only show first 5 products.")
+                selected_products = selected_products[:5]
 
-            # Deduplicate (shouldn't happen with multiselect, but be safe)
+            # Deduplicate selected products (safeguards againt multiselect)
             seen = set()
             active_ids = []
             for pid in selected_products:
@@ -64,7 +70,7 @@ def build_sentiment_tab(product_choices, df, products_df):
                 breakdowns.append(bd)
                 names.append(get_name(pid))
 
-            # Comparison chart (2+ products)
+            # Comparison chart (for multiple products)
             comp_fig = create_multi_comparison_chart(breakdowns, names) if len(active_ids) >= 2 else None
 
             # Individual bar charts in 2-col grid
@@ -72,19 +78,19 @@ def build_sentiment_tab(product_choices, df, products_df):
             cols = min(n, 2)
             rows = math.ceil(n / cols)
             short_titles = [
-                (name[:25] + "…") if len(name) > 25 else name
+                (name[:75] + "…") if len(name) > 75 else name
                 for name in names
             ]
 
             fig = make_subplots(
                 rows=rows, cols=cols,
-                subplot_titles=[f"{short_titles[i]} (n={breakdowns[i]['total']} reviews)" for i in range(n)],
-                vertical_spacing=0.22,
-                horizontal_spacing=0.12,
+                subplot_titles=[f"{short_titles[i]}<br>(n={breakdowns[i]['total']} reviews)" for i in range(n)],
+                vertical_spacing=0.1,
+                horizontal_spacing=0.05,
             )
 
             categories = ['Positive', 'Neutral', 'Negative']
-            bar_colors = ['#2ecc71', '#95a5a6', '#EE4D2D']
+            bar_colors = ['#2ecc71', '#95a5a6', '#e74c3c']
 
             for i, bd in enumerate(breakdowns):
                 r = i // cols + 1
@@ -95,8 +101,8 @@ def build_sentiment_tab(product_choices, df, products_df):
                         x=categories, y=pcts,
                         marker_color=bar_colors,
                         text=[f'{p:.1f}%' for p in pcts],
-                        textposition='inside',
-                        textfont=dict(color='white', size=11),
+                        textposition='outside',
+                        textfont=dict(color='black', size=11),
                         showlegend=False,
                     ),
                     row=r, col=c,
@@ -122,14 +128,14 @@ def build_sentiment_tab(product_choices, df, products_df):
 
                 section = f"""
                 <div style="margin-bottom: 24px; padding: 16px; border: 1px solid #e0e0e0; border-radius: 8px;">
-                    <h4 style="margin: 0 0 12px 0; color: #333;">{names[i]}</h4>
+                    <h4 style="margin: 0 0 12px 0; color: #333333;">{names[i]}</h4>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
                         <div>
-                            <h5 style="margin: 0 0 8px 0;">😊 Positive Terms</h5>
+                            <h5 style="margin: 0 0 8px 0;">Positive Terms</h5>
                             {pos_html}
                         </div>
                         <div>
-                            <h5 style="margin: 0 0 8px 0;">😞 Negative Terms</h5>
+                            <h5 style="margin: 0 0 8px 0;">Negative Terms</h5>
                             {neg_html}
                         </div>
                     </div>
